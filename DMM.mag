@@ -1,0 +1,202 @@
+// 直接计算矩阵乘积所需要的时间。
+k<u>:= GF(25);
+A := RandomMatrix(k,20000,10000);
+B := RandomMatrix(k,10000,12000);
+t_start := Cputime();
+C := A * B;
+time_AB := Cputime(t_start);
+
+function splitrows(A, m)
+    r := NumberOfRows(A);
+    k := r div m;
+    cols := NumberOfColumns(A);
+    blocks := [];
+    for i in [1..m] do
+        start_row := (i-1)*k + 1;
+        Append(~blocks, Submatrix(A, start_row, 1, k, cols));
+    end for;
+    return blocks;
+end function;
+
+function splitcols(B, n)
+    c := NumberOfColumns(B);
+    k := c div n;
+    rows := NumberOfRows(B);
+    blocks := [];
+    for i in [1..n] do
+        start_col := (i-1)*k + 1;
+        Append(~blocks, Submatrix(B, 1, start_col, rows, k));
+    end for;
+    return blocks;
+end function;
+
+function MaxProductTime(A_blocks, B_blocks)
+    max_time := 0.0;
+    m := #A_blocks;
+    n := #B_blocks;
+    matrices_list := [];
+
+    for i in [1..m] do
+        for j in [1..n] do
+            A_i := A_blocks[i];
+            B_j := B_blocks[j];
+
+            t_start := Cputime();
+            C := A_i * B_j;
+            t := Cputime(t_start);
+            Append(~matrices_list,C);
+
+            if t gt max_time then
+                max_time := t;
+            end if;
+        end for;
+    end for;
+
+    return max_time;
+end function;
+
+A_rows := splitrows(A,8);
+A_rows_rs := splitrows(A,4);
+
+B_cols := splitcols(B,5);
+B_cols_rs := splitcols(B,6);
+
+time_AiBj := MaxProductTime(A_rows,B_cols);
+
+time_AB_rs := MaxProductTime(A_rows_rs,B_cols_rs);
+
+// 生成两个函数基,并取定赋值place
+F<x> := FunctionField(k);
+P<Y> := PolynomialRing(F);
+hy := Y^(8) - (x^2 - 3)/(x-1);
+Fy<y> := FunctionField(hy);
+pls := Places(Fy,1)[2..48];
+pls_rs := Places(F,1)[2..25];
+
+// 构造三个函数的基列表
+glist := [];
+glist_rs := [];
+for j in [1..5] do
+    Append(~glist, Fy ! x^(j-1) );
+end for;
+for j in [1..6] do
+    Append(~glist_rs, F ! x^(4*(j-1)));
+end for;
+
+flist := [];
+flist_rs := [];
+for i in [1..8] do
+    Append(~flist, Fy ! y^(i-1) );
+end for;
+for i in [1..4] do
+    Append(~flist_rs, F ! x^(i-1));
+end for;
+
+hlist :=[];
+hlist_rs := [];
+for i in [1..24] do
+    Append(~hlist_rs, F ! x^(i-1));
+end for;
+for i in [1..5] do
+    for j in [1..8] do
+        Append(~hlist,Fy ! x^(i-1)*y^(j-1));
+    end for;
+end for;
+
+// 对以矩阵为系数的函数基赋值
+function matrix_evaluation(place_evaluated, function_basis, matrices_list)
+    m := #function_basis;
+    elements_list := [Evaluate(function_basis[i],place_evaluated) : i in [1..m]];
+    sum_matrix := &+[elements_list[i] * matrices_list[i] : i in [1..m]]; 
+    return sum_matrix;
+end function;
+
+// 对每个place,求f(P_i)和g(P_i),然后分别统计f(P_i),g(P_i)和f(P_i)*g(P_i)所需要的最大的时间。
+function MaxEvaluatedTime(places, function_basis, matrices_list)
+    N := #places;
+    max_time := 0.0;
+    evaluated_list := [];
+
+    for i in [1..N] do
+        t_start := Cputime();
+        evaluated_element := matrix_evaluation(places[i], function_basis,matrices_list);
+        t := Cputime(t_start);
+        Append(~evaluated_list,evaluated_element);
+
+        if t gt max_time then
+            max_time := t;
+        end if;
+    end for;
+
+    return <max_time, matrices_list>;
+end function;
+
+f_Pi_list := MaxEvaluatedTime(pls,flist,A_rows);
+time_f_Pi := f_Pi_list[1]; 
+f_Pi := f_Pi_list[2];
+
+
+f_Pi_rs_list := MaxEvaluatedTime(pls_rs,flist_rs,A_rows_rs);
+time_f_Pi_rs := f_Pi_rs_list[1]; 
+f_Pi_rs := f_Pi_rs_list[2];
+
+g_Pj_list := MaxEvaluatedTime(pls,glist,B_cols);
+time_g_Pj := g_Pj_list[1]; 
+g_Pj := g_Pj_list[2];
+
+
+g_Pj_rs_list := MaxEvaluatedTime(pls_rs,glist_rs,B_cols_rs);
+time_g_Pj_rs := g_Pj_rs_list[1]; 
+g_Pj_rs := g_Pj_rs_list[2];
+
+time_h_Pi := MaxProductTime(f_Pi,g_Pj); 
+
+time_h_Pi_rs := MaxProductTime(f_Pi,g_Pj);
+
+
+// 计算矩阵的逆所需要的时间
+function Matrix_Inversr_Time(places,function_basis)
+    N := #places;
+    mn := #function_basis;
+    h_matrix := [];
+
+    for i in [1..N] do
+        h_row := [Evaluate(function_basis[j], places[i]) : j in [1..mn]];
+        Append(~h_matrix,h_row);
+    end for;
+    h_matrix := Matrix(h_matrix);
+
+    t_start := Cputime();
+    h_T := Transpose(h_matrix);
+    h_i := (h_T*h_matrix)^(-1);
+    t := Cputime(t_start);
+    return t;
+end function;
+
+time_h_inverse := Matrix_Inversr_Time(pls, hlist);
+time_h_inverse_rs := Matrix_Inversr_Time(pls_rs, hlist_rs);
+
+printf "\nMatrix Multiplication Time Analysis:\n
+        |-------------------------------------------------|\n
+        | Full matrix A*B time:                  %10.3o s |\n
+        │ Max A_iB_j (Function Field):           %10.3o s │\n
+        │ Max A_iB_j (Rational Function Field):  %10.3o s │\n
+        |-------------------------------------------------|\n", time_AB,time_AiBj,time_AB_rs;
+
+printf "\nEvaluattion Time Analysis:\n
+|-----------------------------------------------------------|\n
+│ Max f(P_i) (Function Field) time:                %10.3o s │\n
+│ Max g(P_j) (Function Field) time:                %10.3o s │\n
+│ Max f(P_i) (Rational Function Field) time:       %10.3o s │\n
+│ Max f(P_i) (Rational Function Field) time:       %10.3o s │\n
+│ Max f(P_i)*g(P_j) (Function Field):              %10.3o s │\n
+│ Max f(P_i)*g(P_j) (Rational Function Field):     %10.3o s │\n
+|-----------------------------------------------------------|\n", time_f_Pi,time_g_Pj,time_f_Pi_rs,time_g_Pj_rs,time_h_Pi,time_h_Pi_rs;
+
+
+printf "\nDecoding Time Analysis:\n
+|---------------------------------------------------------|\n
+│ Decoding (Function Field) time:                %10.3o s │\n
+│ Decoding (Rational Function Field) time:       %10.3o s │\n
+|---------------------------------------------------------|\n",time_h_inverse,time_h_inverse_rs;
+
