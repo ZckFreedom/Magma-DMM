@@ -151,7 +151,7 @@ g_Pj_rs := g_Pj_rs_list[2];
 
 time_h_Pi := MaxProductTime(f_Pi,g_Pj); 
 
-time_h_Pi_rs := MaxProductTime(f_Pi,g_Pj);
+time_h_Pi_rs := MaxProductTime(f_Pi_rs,g_Pj_rs);
 
 
 // 计算矩阵的逆所需要的时间
@@ -170,11 +170,27 @@ function Matrix_Inversr_Time(places,function_basis)
     h_T := Transpose(h_matrix);
     h_i := (h_T*h_matrix)^(-1);
     t := Cputime(t_start);
-    return t;
+    return <t,h_i>;
 end function;
 
-time_h_inverse := Matrix_Inversr_Time(pls, hlist);
-time_h_inverse_rs := Matrix_Inversr_Time(pls_rs, hlist_rs);
+h_inverse_list := Matrix_Inversr_Time(pls, hlist);
+time_h_inverse := h_inverse_list[1];
+h_inverse_matrix := h_inverse_list[2];
+v := RandomMatrix(k,1,47);
+time_start := Cputime();
+h_ij := v*h_inverse_matrix;
+time_hij := Cputime(time_start);
+
+
+h_inverse_list_rs := Matrix_Inversr_Time(pls_rs, hlist_rs);
+time_h_inverse_rs := h_inverse_list_rs[1];
+h_inverse_matrix_rs := h_inverse_list_rs[2];
+v := RandomMatrix(k,1,24);
+time_start := Cputime();
+h_ij_rs := v*h_inverse_matrix_rs;
+time_hij_rs := Cputime(time_start);
+
+
 
 printf "\nMatrix Multiplication Time Analysis:\n
         |-------------------------------------------------|\n
@@ -188,15 +204,17 @@ printf "\nEvaluattion Time Analysis:\n
 │ Max f(P_i) (Function Field) time:                %10.3o s │\n
 │ Max g(P_j) (Function Field) time:                %10.3o s │\n
 │ Max f(P_i) (Rational Function Field) time:       %10.3o s │\n
-│ Max f(P_i) (Rational Function Field) time:       %10.3o s │\n
+│ Max g(P_i) (Rational Function Field) time:       %10.3o s │\n
 │ Max f(P_i)*g(P_j) (Function Field):              %10.3o s │\n
 │ Max f(P_i)*g(P_j) (Rational Function Field):     %10.3o s │\n
 |-----------------------------------------------------------|\n", time_f_Pi,time_g_Pj,time_f_Pi_rs,time_g_Pj_rs,time_h_Pi,time_h_Pi_rs;
 
 
 printf "\nDecoding Time Analysis:\n
-|---------------------------------------------------------|\n
-│ Decoding (Function Field) time:                %10.3o s │\n
-│ Decoding (Rational Function Field) time:       %10.3o s │\n
-|---------------------------------------------------------|\n",time_h_inverse,time_h_inverse_rs;
+|-------------------------------------------------------------------------|\n
+│ Generator Matrix Inverse (Function Field) time:                %10.8o s │\n
+│ Generator Matrix Inverse (Rational Function Field) time:       %10.8o s │\n
+│ Decoding (Rational Function Field) time:                       %10.8o s │\n
+│ Decoding (Rational Function Field) time:                       %10.8o s │\n
+|-------------------------------------------------------------------------|\n",time_h_inverse,time_h_inverse_rs,time_hij,time_hij_rs;
 
