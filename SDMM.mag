@@ -1,0 +1,178 @@
+function choose_function_with_pole(E, n)
+    y := E.1;
+    x := E!BaseField(E).1;
+    d := 2 * Genus(E) + 1;
+    
+    
+    if n mod 2 eq 0 then
+        return x^(n div 2);
+    else
+        return x^((n - d) div 2) * y;
+    end if;
+end function;
+
+function generator_matrix(basis, places)
+    rows := [];
+    for f in basis do
+        row := [];
+        for P in places do
+            Append(~row, Evaluate(f, P));
+        end for;
+        Append(~rows, row);
+    end for;
+    return Matrix(rows);
+end function;
+
+function vector_matrix_multiplication(vec, mat)
+    
+    k := #vec; 
+    n := Ncols(mat);
+    
+    // 验证输入维度
+    if Nrows(mat) ne k then
+        error "the number of rows must equal k";
+    end if;
+    
+    result := [];
+    
+    base_ring := BaseRing(vec[1]);
+    rows := Nrows(vec[1]);
+    cols := Ncols(vec[1]);
+    
+    for j := 1 to n do
+        sum_matrix := ZeroMatrix(base_ring, rows, cols);
+        
+        for i := 1 to k do
+            scalar := mat[i, j];
+            
+            if scalar ne 0 then
+                scaled_matrix := scalar * vec[i];
+                sum_matrix +:= scaled_matrix;
+            end if;
+        end for;
+        
+        Append(~result, sum_matrix);
+    end for;
+    
+    return result;
+end function;
+
+function vsplit(A, K)
+    rows := Nrows(A);
+    n := rows div K;
+    return [Submatrix(A, (k-1)*n + 1, 1, n, Ncols(A)) : k in [1..K]];
+end function;
+
+function hsplit(B, L)
+    cols := Ncols(B);
+    n := cols div L;
+    return [Submatrix(B, 1, (l-1)*n + 1, Nrows(B), n) : l in [1..L]];
+end function;
+
+function assemble_block_matrix_in_column_order(submatrices, K, L)
+    blocks := [];
+    for i in [1..K] do
+        Append(~blocks,[submatrices[i+(j-1)*K] : j in [1..L]]);
+    end for;
+    return BlockMatrix(blocks);
+end function;
+
+function MatrixPivots(M)
+    E := EchelonForm(M);
+    
+    pivots := [];
+    for i := 1 to Nrows(E) do
+        found := false;
+        for j := 1 to Ncols(E) do
+            if E[i,j] ne 0 then
+                Append(~pivots, j);
+                found := true;
+                break;
+            end if;
+        end for;
+        
+        if not found then
+            continue;
+        end if;
+    end for;
+    
+    return pivots;
+end function;
+
+// Main code
+function dmm(K,L,X,q) 
+
+    d := K*(L - 1) + 2*X - 1;
+    g := (d - 1) div 2;
+
+    Fq := GF(q);
+    F<x> := FunctionField(Fq);
+    alphas := [Fq | i : i in [0..d-1]];
+    s := &*[x - a : a in alphas];
+    r := IsEven(q) select 1 else 0;
+    P := PolynomialRing(F);
+    F<y> := FunctionField(P.1^2 + r*P.1 - s);
+    x := F!x;
+
+    g_field := Genus(F);
+
+    Pinf := InfinitePlaces(F)[1];
+
+    f_pole_numbers := [2*j : j in [0..X-1]] cat [d + k : k in [L..L+K-1]];
+    g_pole_numbers := [2*j : j in [0..X-1]] cat [2*X-2 + (K+1)*l : l in [1..L]];
+    h_pole_numbers := Sort(SetToSequence({f + g : f in f_pole_numbers, g in g_pole_numbers}));
+
+    f_basis := [choose_function_with_pole(F, n) : n in f_pole_numbers];
+    g_basis := [choose_function_with_pole(F, n) : n in g_pole_numbers];
+    h_basis := [choose_function_with_pole(F, n) : n in h_pole_numbers];
+
+    all_places := Places(F,1);
+    Exclude(~all_places, Pinf);
+    places := [];
+    x_coords := [];
+    for Q in all_places do
+        x_coord := Evaluate(x, Q);
+        if not x_coord in x_coords then
+            Include(~x_coords, x_coord);
+            Append(~places, Q);
+            if #places gt 2*d+2*K+2*L-1 then
+                break;
+            end if;
+        end if;
+    end for;
+    assert #places gt 2*d+2*K+2*L-1;
+
+    GA := generator_matrix(f_basis, places);
+    GB := generator_matrix(g_basis, places);
+    GC := generator_matrix(h_basis, places);
+
+    information_set := MatrixPivots(GC);
+    GA := ColumnSubmatrix(GA, information_set);
+    GB := ColumnSubmatrix(GB, information_set);
+    GC := ColumnSubmatrix(GC, information_set);
+
+    recovery_threshold := #information_set;
+
+    block_size := 10;
+    A := RandomMatrix(Fq, K*block_size, block_size);
+    B := RandomMatrix(Fq, block_size, L*block_size);
+
+    A_split := vsplit(A, K);
+    B_split := hsplit(B, L);
+
+    R := [RandomMatrix(Fq, block_size, block_size) : i in [1..X]];
+    S := [RandomMatrix(Fq, block_size, block_size) : i in [1..X]];
+
+    A_enc := vector_matrix_multiplication(R cat A_split, GA);
+    B_enc := vector_matrix_multiplication(S cat B_split, GB);
+
+    C_enc := [A_enc[i] * B_enc[i] : i in [1..#(A_enc)]];
+
+    GC_inv := GC^(-1);
+    encoded_blocks := vector_matrix_multiplication(C_enc, GC_inv);
+    encoded_blocks := [Vector(encoded_blocks)[i] : i in [#encoded_blocks - K*L + 1..#encoded_blocks]];
+    C := assemble_block_matrix_in_column_order(encoded_blocks, K, L);
+return C eq A*B;
+end function;
+
+dmm(5,5,5,127);
