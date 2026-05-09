@@ -28,7 +28,6 @@ function vector_matrix_multiplication(vec, mat)
     k := #vec; 
     n := Ncols(mat);
     
-    // 验证输入维度
     if Nrows(mat) ne k then
         error "the number of rows must equal k";
     end if;
