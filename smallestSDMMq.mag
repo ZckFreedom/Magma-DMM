@@ -1,0 +1,115 @@
+function findtheq_CAT(K,L,X)
+    K_ := K+1;
+    L_ := L+1;
+    X_ := X-1;
+    while GCD(K_,X_) ne 1 do
+        K_ := K_+1;
+    end while;
+    while GCD(L_,X_) ne 1 do
+        L_ := L_+1;
+    end while;
+    kappa := K_-1-K;
+    lambda := L_-1-L;
+    round := K_*L_+(X_)^2;
+    y := 1;
+    while (y*K_+X_)mod round ne 0  do
+        y := y+1;
+    end while;
+    degtable := [(y*i -1)mod round : i in [0..X_]];
+    q := 1;
+    while true do
+        q := q+round;
+        while not IsPrimePower(q) do
+            q := q+round;
+        end while;
+        Fq := GF(q);
+        ome := PrimitiveElement(Fq)^((q-1) div round);
+        pls := [Fq | ome^i : i in [0..round-1]];
+        rows := [];
+        for i in degtable do
+            row := [pls[j]^i : j in [1..round]];
+            Append(~rows, row);
+        end for;
+        H := LinearCode(Matrix(rows));
+        if IsMDS(H) then
+            return q, round, (K+1)*(L+1)+(X_)^2+kappa+lambda;
+        end if;
+    end while;
+end function;
+
+function findtheq_Pole(K,L,X)
+    d := K*(L - 1) + 2*X - 1;
+    g := (d - 1) div 2;
+    q := d+1;
+    while true do
+        if IsPrimePower(q) then
+            Fq := GF(q);
+            F<x> := FunctionField(Fq);
+            alphas := [Fq | i : i in [0..d-1]];
+            s := &*[x - a : a in alphas];
+            r := IsEven(q) select 1 else 0;
+            P := PolynomialRing(F);
+            F<y> := FunctionField(P.1^2 + r*P.1 - s);
+            Pinf := InfinitePlaces(F)[1];
+
+            f_pole_numbers := [2*j : j in [0..X-1]] cat [d + k : k in [0..K-1]];
+            g_pole_numbers := [2*j : j in [0..X-1]] cat [2*X - 2 + K*(l + 1) : l in [0..L-1]];
+            h_pole_numbers := Sort(SetToSequence({f + g : f in f_pole_numbers, g in g_pole_numbers}));
+
+            all_places := Places(F,1);
+            Exclude(~all_places, Pinf);
+            places := [];
+            x_coords := [];
+            for Q in all_places do
+                x_coord := Evaluate(x, Q);
+                if not x_coord in x_coords then
+                    Include(~x_coords, x_coord);
+                    Append(~places, Q);
+                end if;
+            end for;
+            if #places ge (#h_pole_numbers+g) then
+                return q,#places,#h_pole_numbers;
+            end if;
+        end if;
+        q := q+1;
+    end while;
+end function;
+
+function findtheq_Poleodd(K,L,X)
+    d := K*(L - 1) + 2*X - 1;
+    g := (d - 1) div 2;
+    q := d+1;
+    while true do
+        if IsPrimePower(q) then
+            Fq := GF(q);
+            F<x> := FunctionField(Fq);
+            alphas := [Fq | i : i in [0..d-1]];
+            s := &*[x - a : a in alphas];
+            r := IsEven(q) select 1 else 0;
+            P := PolynomialRing(F);
+            F<y> := FunctionField(P.1^2 + r*P.1 - s);
+            Pinf := InfinitePlaces(F)[1];
+
+            f_pole_numbers := [2*j : j in [0..X-1]] cat [d + k : k in [0..K-1]];
+            g_pole_numbers := [2*j : j in [0..X-1]] cat [d-K+l*K : l in [0..L-1]];
+            h_pole_numbers := Sort(SetToSequence({f + g : f in f_pole_numbers, g in g_pole_numbers}));
+
+            all_places := Places(F,1);
+            Exclude(~all_places, Pinf);
+            places := [];
+            x_coords := [];
+            for Q in all_places do
+                x_coord := Evaluate(x, Q);
+                if not x_coord in x_coords then
+                    Include(~x_coords, x_coord);
+                    Append(~places, Q);
+                end if;
+            end for;
+            if #places ge (#h_pole_numbers+g+1) then
+                return q,#places,#h_pole_numbers;
+            end if;
+        end if;
+        q := q+1;
+    end while;
+end function;
+
